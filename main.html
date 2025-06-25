@@ -1,4 +1,5 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>2PAY Dashboard</title>
@@ -7,17 +8,35 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
     body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #f4f6f9; }
-    .navbar { background-color: #1d2b64; color: white; padding: 16px 24px; font-size: 20px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
-    .balance-card { background-color: white; margin: 20px auto; padding: 20px; width: 90%; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-    .balance-card h2 { margin: 0 0 10px; color: #444; }
+    .navbar {
+      background-color: #1d2b64; color: white; padding: 16px 24px;
+      font-size: 20px; font-weight: bold;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .balance-card, .section {
+      background: white; width: 90%; margin: 20px auto;
+      padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
     .balance { font-size: 28px; font-weight: bold; color: #2d8cff; }
-    .actions { margin: 20px auto; width: 90%; display: flex; gap: 15px; justify-content: center; flex-wrap: wrap; }
-    .actions button { padding: 12px 24px; border: none; background-color: #2d8cff; color: white; border-radius: 6px; font-size: 16px; cursor: pointer; }
-    .modal { display: none; position: fixed; z-index: 10; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
-    .modal-content { background: white; padding: 20px; border-radius: 10px; width: 90%; max-width: 400px; }
-    .modal-content input { width: 100%; padding: 10px; margin-bottom: 12px; }
-    .modal-content button { width: 100%; padding: 12px; background: #2d8cff; color: white; border: none; border-radius: 6px; }
-    .transaction, .withdraw-request { background: white; margin: 10px auto; padding: 12px; width: 90%; border-radius: 8px; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
+    .actions { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-top: 10px; }
+    .actions button {
+      padding: 10px 20px; border: none; border-radius: 6px;
+      background-color: #2d8cff; color: white; cursor: pointer;
+    }
+    .filter-select {
+      display: block; width: 90%; margin: 10px auto;
+      padding: 10px; font-size: 16px;
+    }
+    .request-card {
+      background: #fff; margin-top: 10px; padding: 15px;
+      border-radius: 8px; box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+    .telegram-link {
+      text-align: center; margin-top: 40px;
+    }
+    .telegram-link a {
+      color: #2d8cff; text-decoration: none; font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -25,36 +44,32 @@
     2PAY
     <span id="user-email">Loading...</span>
   </div>
+
   <div class="balance-card">
     <h2>Available Balance</h2>
     <div class="balance" id="balance">$0.00</div>
-  </div>
-  <div class="actions">
-    <button onclick="openModal('sendModal')">Send to 2PAY</button>
-    <button onclick="openModal('depositModal')">Deposit</button>
-    <button onclick="location.href='withdraw.html'">Withdraw</button>
-  </div>
-  <div id="withdrawRequests">
-    <h3 style="padding: 0 20px;">Withdrawal Requests</h3>
-  </div>
-  <div id="txList">
-    <h3 style="padding: 0 20px;">Transactions</h3>
-  </div>  <!-- Send Modal -->  <div class="modal" id="sendModal">
-    <div class="modal-content">
-      <h3>Send to 2PAY</h3>
-      <input type="number" id="sendAmount" placeholder="Enter amount" />
-      <input type="email" id="receiverEmail" placeholder="Enter receiver email" />
-      <button onclick="sendTo2Pay()">Send</button>
+    <div class="actions">
+      <button onclick="sendTo2Pay()">Send to 2PAY</button>
+      <button onclick="alert('Feature not available now')">Deposit</button>
+      <button onclick="location.href='withdraw.html'">Withdraw</button>
     </div>
   </div>
-  <!-- Deposit Modal -->
-  <div class="modal" id="depositModal">
-    <div class="modal-content">
-      <h3>Deposit</h3>
-      <input type="number" id="depositAmount" placeholder="Enter amount to deposit" />
-      <button onclick="depositFunds()">Deposit</button>
-    </div>
-  </div>  <script>
+
+  <select class="filter-select" onchange="changeView(this.value)">
+    <option value="withdraw">Withdrawal Requests</option>
+    <option value="deposit">Deposit Requests</option>
+    <option value="chats">Ongoing Chats</option>
+  </select>
+
+  <div class="section">
+    <div id="contentList"></div>
+  </div>
+
+  <div class="telegram-link">
+    <p>Join our <a href="https://t.me/official2pay" target="_blank">TELEGRAM CHANNEL</a></p>
+  </div>
+
+  <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDvFDByPPo9zgwKLdPaREz1OVMQCXmPfrs",
       authDomain: "bets-d795d.firebaseapp.com",
@@ -65,111 +80,132 @@
       appId: "1:384386108287:android:d238a5ec8068d9bb9be84a"
     };
     firebase.initializeApp(firebaseConfig);
-
-    const auth = firebase.auth();
     const db = firebase.database();
-    let currentUser = null;
-    let userCountry = "";
+    const auth = firebase.auth();
+    let currentUser;
+    let currentView = "withdraw";
 
     auth.onAuthStateChanged(user => {
-      if (!user) return;
+      if (!user) return location.href = "index.html";
       currentUser = user;
-      document.getElementById('user-email').textContent = user.email;
-
-      const userRef = db.ref('users/' + user.uid);
-      userRef.once('value').then(snapshot => {
-        const data = snapshot.val();
-        if (data) {
-          document.getElementById("balance").textContent = "$" + parseFloat(data.balance || 0).toFixed(2);
-          userCountry = data.country || "";
-          loadWithdrawRequests();
-        }
-      });
-
-      db.ref('transactions/' + user.uid).on('child_added', snap => {
-        const tx = snap.val();
-        const div = document.createElement("div");
-        div.className = "transaction";
-        div.innerHTML = `${tx.type || 'Transfer'}: $${tx.amount} to ${tx.toEmail || 'Self'} <br><small>${new Date(tx.timestamp).toLocaleString()}</small>`;
-        document.getElementById("txList").appendChild(div);
-      });
+      document.getElementById("user-email").textContent = user.email;
+      loadBalance();
+      loadContent();
     });
 
-    function loadWithdrawRequests() {
-      db.ref("withdrawals").on("child_added", snapshot => {
-        const req = snapshot.val();
-        if (!req || req.uid === currentUser.uid || req.acceptedBy) return;
-        if (req.country === userCountry) {
-          const div = document.createElement("div");
-          div.className = "withdraw-request";
-          div.innerHTML = `
-            <strong>Email:</strong> ${req.email || 'N/A'}<br>
-            <strong>Amount:</strong> $${req.amount || 0}<br>
-            <strong>Bank:</strong> ${req.bankName || 'N/A'}<br>
-            <strong>Account:</strong> ${req.accountNumber || 'N/A'}<br>
-            <small>${new Date(req.timestamp).toLocaleString()}</small><br>
-            <button onclick="acceptRequest('${snapshot.key}', '${req.uid}')">Accept</button>
-          `;
-          document.getElementById("withdrawRequests").appendChild(div);
-        }
+    function loadBalance() {
+      db.ref("users/" + currentUser.uid + "/balance").on("value", snap => {
+        const bal = snap.val() || 0;
+        document.getElementById("balance").textContent = "$" + parseFloat(bal).toFixed(2);
       });
     }
 
-    function openModal(id) {
-      document.getElementById(id).style.display = "flex";
+    function changeView(view) {
+      currentView = view;
+      loadContent();
     }
-    window.onclick = function(event) {
-      ["sendModal", "depositModal"].forEach(id => {
-        if (event.target === document.getElementById(id)) document.getElementById(id).style.display = "none";
+
+    function loadContent() {
+      const container = document.getElementById("contentList");
+      container.innerHTML = "";
+
+      if (currentView === "withdraw") {
+        db.ref("withdrawals").once("value", snap => {
+          snap.forEach(child => {
+            const data = child.val();
+            const key = child.key;
+            if (data.status === "pending" && data.uid !== currentUser.uid) {
+              const earn = (data.amount * 1.2).toFixed(2);
+              const div = document.createElement("div");
+              div.className = "request-card";
+              div.innerHTML = `
+                <h4>Amount: $${data.amount}</h4>
+                <p><b>You will earn:</b> $${earn}</p>
+                <p>Email: ${data.email || 'N/A'}</p>
+                <p>Bank: ${data.bankName || 'N/A'}</p>
+                <p>Account: ${data.accountNumber || 'N/A'}</p>
+                <p>Country: ${data.country || 'N/A'}</p>
+                <p>${new Date(data.timestamp).toLocaleString()}</p>
+                <button onclick="acceptRequest('${key}')">Accept</button>
+              `;
+              container.appendChild(div);
+            }
+          });
+        });
+      }
+
+      else if (currentView === "deposit") {
+        const placeholder = document.createElement("div");
+        placeholder.className = "request-card";
+        placeholder.innerHTML = "<p>Deposit requests coming soon...</p>";
+        container.appendChild(placeholder);
+      }
+
+      else if (currentView === "chats") {
+        db.ref("withdrawals").once("value", snap => {
+          snap.forEach(child => {
+            const data = child.val();
+            if (data.status === "accepted" &&
+               (data.uid === currentUser.uid || data.acceptedBy === currentUser.uid)) {
+              const div = document.createElement("div");
+              div.className = "request-card";
+              div.innerHTML = `
+                <h4>Ongoing Chat</h4>
+                <p>Amount: $${data.amount}</p>
+                <button onclick="goToChat('${data.chatId}')">Chat Now</button>
+              `;
+              container.appendChild(div);
+            }
+          });
+        });
+      }
+    }
+
+    function acceptRequest(key) {
+      const ref = db.ref("withdrawals/" + key);
+      ref.once("value", snap => {
+        const data = snap.val();
+        if (data.status !== "pending") return alert("Already accepted.");
+        const chatId = "chat_" + Date.now();
+        ref.update({ status: "accepted", acceptedBy: currentUser.uid, chatId });
+        window.location.href = `chat.html?id=${chatId}`;
       });
+    }
+
+    function goToChat(chatId) {
+      window.location.href = `chat.html?id=${chatId}`;
     }
 
     async function sendTo2Pay() {
-      const amount = parseFloat(document.getElementById("sendAmount").value);
-      const receiverEmail = document.getElementById("receiverEmail").value.trim();
-      if (!amount || !receiverEmail) return alert("Fill all fields correctly");
-      const snapshot = await db.ref("users").orderByChild("email").equalTo(receiverEmail).once("value");
-      if (!snapshot.exists()) return alert("Receiver not found");
-      const [toUid, toData] = Object.entries(snapshot.val())[0];
+      const receiverEmail = prompt("Enter receiver's email:");
+      const amountStr = prompt("Enter amount to send:");
+      const amount = parseFloat(amountStr);
 
-      const senderBalRef = db.ref(`users/${currentUser.uid}/balance`);
-      const receiverBalRef = db.ref(`users/${toUid}/balance`);
+      if (!receiverEmail || isNaN(amount) || amount <= 0) {
+        return alert("Please enter valid inputs.");
+      }
 
-      senderBalRef.transaction(bal => {
-        if (!bal || bal < amount) return;
-        return bal - amount;
-      });
-      receiverBalRef.transaction(bal => (bal || 0) + amount);
+      if (receiverEmail === currentUser.email) {
+        return alert("You cannot send money to yourself.");
+      }
 
-      const tx = {
-        from: currentUser.uid,
-        to: toUid,
-        toEmail: receiverEmail,
-        amount,
-        timestamp: Date.now()
-      };
-      db.ref(`transactions/${currentUser.uid}`).push({...tx, type: 'Sent'});
-      db.ref(`transactions/${toUid}`).push({...tx, type: 'Received'});
+      const receiverSnap = await db.ref("users").orderByChild("email").equalTo(receiverEmail).once("value");
+      if (!receiverSnap.exists()) return alert("Receiver not found");
 
-      alert("Sent successfully");
-      document.getElementById("sendModal").style.display = "none";
+      const receiverUid = Object.keys(receiverSnap.val())[0];
+      const senderRef = db.ref("users/" + currentUser.uid + "/balance");
+      const senderSnap = await senderRef.once("value");
+      const senderBal = senderSnap.val() || 0;
+
+      if (senderBal < amount) return alert("Insufficient balance");
+
+      const receiverRef = db.ref("users/" + receiverUid + "/balance");
+
+      await senderRef.set(senderBal - amount);
+      await receiverRef.transaction(bal => (bal || 0) + amount);
+
+      alert("Sent successfully to " + receiverEmail);
     }
-
-    function depositFunds() {
-      const amount = parseFloat(document.getElementById("depositAmount").value);
-      if (!amount || amount <= 0) return alert("Invalid amount");
-      const ref = db.ref(`users/${currentUser.uid}/balance`);
-      ref.transaction(bal => (bal || 0) + amount);
-      db.ref(`transactions/${currentUser.uid}`).push({ type: "Deposit", amount, timestamp: Date.now() });
-      document.getElementById("depositModal").style.display = "none";
-    }
-
-    function acceptRequest(requestId, requesterUid) {
-      const update = { acceptedBy: currentUser.uid };
-      db.ref("withdrawals/" + requestId).update(update).then(() => {
-        alert("You have accepted this request.");
-        location.reload();
-      });
-    }
-  </script></body>
+  </script>
+</body>
 </html>
