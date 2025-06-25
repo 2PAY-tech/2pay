@@ -3,40 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <title>2PAY Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
     body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #f4f6f9; }
-    .navbar {
-      background-color: #1d2b64; color: white; padding: 16px 24px;
-      font-size: 20px; font-weight: bold;
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    .balance-card, .section {
-      background: white; width: 90%; margin: 20px auto;
-      padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    }
+    .navbar { background-color: #1d2b64; color: white; padding: 16px 24px; font-size: 20px; font-weight: bold; display: flex; justify-content: space-between; }
+    .balance-card, .section { background: white; width: 90%; margin: 20px auto; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
     .balance { font-size: 28px; font-weight: bold; color: #2d8cff; }
     .actions { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-top: 10px; }
-    .actions button {
-      padding: 10px 20px; border: none; border-radius: 6px;
-      background-color: #2d8cff; color: white; cursor: pointer;
-    }
-    .filter-select {
-      display: block; width: 90%; margin: 10px auto;
-      padding: 10px; font-size: 16px;
-    }
-    .request-card {
-      background: #fff; margin-top: 10px; padding: 15px;
-      border-radius: 8px; box-shadow: 0 0 5px rgba(0,0,0,0.1);
-    }
-    .telegram-link {
-      text-align: center; margin-top: 40px;
-    }
-    .telegram-link a {
-      color: #2d8cff; text-decoration: none; font-weight: bold;
-    }
+    .actions button { padding: 10px 20px; border: none; border-radius: 6px; background-color: #2d8cff; color: white; cursor: pointer; }
+    .filter-select { display: block; width: 90%; margin: 10px auto; padding: 10px; font-size: 16px; }
+    .request-card { background: #fff; margin-top: 10px; padding: 15px; border-radius: 8px; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
+    .telegram-link { text-align: center; margin-top: 40px; }
+    .telegram-link a { color: #2d8cff; text-decoration: none; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -94,9 +75,9 @@
     });
 
     function loadBalance() {
-      db.ref("users/" + currentUser.uid + "/balance").on("value", snap => {
+      db.ref(`users/${currentUser.uid}/balance`).on("value", snap => {
         const bal = snap.val() || 0;
-        document.getElementById("balance").textContent = "$" + parseFloat(bal).toFixed(2);
+        document.getElementById("balance").textContent = `$${parseFloat(bal).toFixed(2)}`;
       });
     }
 
@@ -113,7 +94,7 @@
         db.ref("withdrawals").once("value", snap => {
           snap.forEach(child => {
             const data = child.val();
-            const key = child.key;
+            console.log("Withdrawal data:", child.key, data); // debug
             if (data.status === "pending" && data.uid !== currentUser.uid) {
               const earn = (data.amount * 1.2).toFixed(2);
               const div = document.createElement("div");
@@ -126,27 +107,22 @@
                 <p>Account: ${data.accountNumber || 'N/A'}</p>
                 <p>Country: ${data.country || 'N/A'}</p>
                 <p>${new Date(data.timestamp).toLocaleString()}</p>
-                <button onclick="acceptRequest('${key}')">Accept</button>
+                <button onclick="acceptRequest('${child.key}')">Accept</button>
               `;
               container.appendChild(div);
             }
           });
         });
-      }
-
-      else if (currentView === "deposit") {
+      } else if (currentView === "deposit") {
         const placeholder = document.createElement("div");
         placeholder.className = "request-card";
         placeholder.innerHTML = "<p>Deposit requests coming soon...</p>";
         container.appendChild(placeholder);
-      }
-
-      else if (currentView === "chats") {
+      } else if (currentView === "chats") {
         db.ref("withdrawals").once("value", snap => {
           snap.forEach(child => {
             const data = child.val();
-            if (data.status === "accepted" &&
-               (data.uid === currentUser.uid || data.acceptedBy === currentUser.uid)) {
+            if (data.status === "accepted" && (data.uid === currentUser.uid || data.acceptedBy === currentUser.uid)) {
               const div = document.createElement("div");
               div.className = "request-card";
               div.innerHTML = `
@@ -162,11 +138,11 @@
     }
 
     function acceptRequest(key) {
-      const ref = db.ref("withdrawals/" + key);
+      const ref = db.ref(`withdrawals/${key}`);
       ref.once("value", snap => {
         const data = snap.val();
         if (data.status !== "pending") return alert("Already accepted.");
-        const chatId = "chat_" + Date.now();
+        const chatId = `chat_${Date.now()}`;
         ref.update({ status: "accepted", acceptedBy: currentUser.uid, chatId });
         window.location.href = `chat.html?id=${chatId}`;
       });
@@ -184,27 +160,48 @@
       if (!receiverEmail || isNaN(amount) || amount <= 0) {
         return alert("Please enter valid inputs.");
       }
-
       if (receiverEmail === currentUser.email) {
         return alert("You cannot send money to yourself.");
       }
 
-      const receiverSnap = await db.ref("users").orderByChild("email").equalTo(receiverEmail).once("value");
+      const receiverSnap = await db
+        .ref("users")
+        .orderByChild("email")
+        .equalTo(receiverEmail)
+        .once("value");
       if (!receiverSnap.exists()) return alert("Receiver not found");
 
       const receiverUid = Object.keys(receiverSnap.val())[0];
-      const senderRef = db.ref("users/" + currentUser.uid + "/balance");
-      const senderSnap = await senderRef.once("value");
-      const senderBal = senderSnap.val() || 0;
+      const senderRef = db.ref(`users/${currentUser.uid}/balance`);
+      const receiverRef = db.ref(`users/${receiverUid}/balance`);
 
-      if (senderBal < amount) return alert("Insufficient balance");
+      const sendResult = await senderRef.transaction(bal => {
+        if (!bal || bal < amount) {
+          alert("Insufficient balance");
+          return; // abort
+        }
+        return bal - amount;
+      }, null, false);
 
-      const receiverRef = db.ref("users/" + receiverUid + "/balance");
+      if (!sendResult.committed) return; // stop if failed
 
-      await senderRef.set(senderBal - amount);
       await receiverRef.transaction(bal => (bal || 0) + amount);
 
-      alert("Sent successfully to " + receiverEmail);
+      // Log transactions
+      db.ref(`transactions/${currentUser.uid}`).push({
+        type: "Sent",
+        amount,
+        to: receiverEmail,
+        timestamp: Date.now()
+      });
+      db.ref(`transactions/${receiverUid}`).push({
+        type: "Received",
+        amount,
+        from: currentUser.email,
+        timestamp: Date.now()
+      });
+
+      alert(`Sent $${amount} to ${receiverEmail}`);
     }
   </script>
 </body>
