@@ -1,0 +1,148 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Anonymous Chat - 2PAY</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #eef2f7; margin: 0; padding: 0; }
+    #chatBox { max-width: 600px; margin: 40px auto; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    #messages { max-height: 400px; overflow-y: auto; margin-bottom: 10px; }
+    .msg { padding: 8px 12px; margin: 6px 0; background: #dfefff; border-radius: 8px; }
+    #inputArea { display: flex; gap: 10px; }
+    #inputArea input { flex: 1; padding: 10px; }
+    #inputArea button { padding: 10px; background: #2d8cff; color: white; border: none; border-radius: 5px; }
+    #actions { margin-top: 15px; text-align: center; }
+    #actions button { margin: 5px; padding: 10px; border: none; border-radius: 6px; cursor: pointer; }
+    .release { background: green; color: white; }
+    .cancel { background: red; color: white; }
+    .confirm-cancel { background: orange; color: white; }
+  </style>
+</head>
+<body>
+  <div id="chatBox">
+    <div id="messages"></div>
+    <div id="inputArea">
+      <input type="text" id="messageInput" placeholder="Type your message...">
+      <button onclick="sendMessage()">Send</button>
+    </div>
+    <div id="actions">
+      <button id="releaseBtn" class="release" style="display:none" onclick="releaseFunds()">Release Funds</button>
+      <button class="cancel" onclick="initiateCancel()">Cancel Transaction</button>
+      <button id="confirmCancelBtn" class="confirm-cancel" style="display:none" onclick="confirmCancel()">Accept Cancellation</button>
+    </div>
+  </div><script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyDvFDByPPo9zgwKLdPaREz1OVMQCXmPfrs",
+    authDomain: "bets-d795d.firebaseapp.com",
+    databaseURL: "https://bets-d795d-default-rtdb.firebaseio.com",
+    projectId: "bets-d795d",
+    storageBucket: "bets-d795d.appspot.com",
+    messagingSenderId: "384386108287",
+    appId: "1:384386108287:android:d238a5ec8068d9bb9be84a"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.database();
+
+  let currentUser, chatId, userRole;
+
+  const urlParams = new URLSearchParams(window.location.search);
+  chatId = urlParams.get('id');
+
+  auth.onAuthStateChanged(user => {
+    if (!user) return location.href = "index.html";
+    currentUser = user;
+    loadChat();
+  });
+
+  function loadChat() {
+    db.ref("withdrawals").orderByChild("chatId").equalTo(chatId).once("value", snap => {
+      if (!snap.exists()) return alert("Chat not found");
+      const request = Object.values(snap.val())[0];
+      userRole = (request.uid === currentUser.uid) ? "requester" : "accepter";
+
+      if (userRole === "requester") document.getElementById("releaseBtn").style.display = "inline-block";
+      listenForMessages();
+      listenForCancelStatus();
+    });
+  }
+
+  function listenForMessages() {
+    db.ref("chats/" + chatId).on("child_added", snap => {
+      const msg = snap.val();
+      const div = document.createElement("div");
+      div.className = "msg";
+      div.textContent = msg.sender === currentUser.uid ? "You: " + msg.text : "Partner: " + msg.text;
+      document.getElementById("messages").appendChild(div);
+    });
+  }
+
+  function sendMessage() {
+    const text = document.getElementById("messageInput").value.trim();
+    if (!text) return;
+    const msg = {
+      sender: currentUser.uid,
+      text,
+      timestamp: Date.now()
+    };
+    db.ref("chats/" + chatId).push(msg);
+    document.getElementById("messageInput").value = "";
+  }
+
+  function releaseFunds() {
+    if (!confirm("Confirm release of funds?")) return;
+    db.ref("withdrawals").orderByChild("chatId").equalTo(chatId).once("value", async snap => {
+      const key = Object.keys(snap.val())[0];
+      const data = snap.val()[key];
+      if (data.status !== "accepted") return;
+
+      const amount = parseFloat(data.amount);
+      const bonus = amount * 0.2;
+      const total = amount + bonus;
+
+      const accepterBalanceRef = db.ref("users/" + data.acceptedBy + "/balance");
+      await accepterBalanceRef.transaction(bal => (bal || 0) + total);
+
+      await db.ref("withdrawals/" + key).update({ status: "completed" });
+      db.ref("chats/" + chatId).push({ sender: "system", text: "Funds released. Transaction completed.", timestamp: Date.now() });
+
+      alert("Funds released successfully");
+      window.location.href = "main.html";
+    });
+  }
+
+  function initiateCancel() {
+    db.ref("withdrawals").orderByChild("chatId").equalTo(chatId).once("value", snap => {
+      const key = Object.keys(snap.val())[0];
+      db.ref("withdrawals/" + key).update({ cancelRequestedBy: currentUser.uid });
+      db.ref("chats/" + chatId).push({ sender: "system", text: "Cancellation requested. Waiting for confirmation.", timestamp: Date.now() });
+    });
+  }
+
+  function listenForCancelStatus() {
+    db.ref("withdrawals").orderByChild("chatId").equalTo(chatId).on("value", snap => {
+      if (!snap.exists()) return;
+      const data = Object.values(snap.val())[0];
+      if (data.cancelRequestedBy && data.cancelRequestedBy !== currentUser.uid && data.status === "accepted") {
+        document.getElementById("confirmCancelBtn").style.display = "inline-block";
+      }
+    });
+  }
+
+  function confirmCancel() {
+    if (!confirm("Confirm cancellation and refund?")) return;
+    db.ref("withdrawals").orderByChild("chatId").equalTo(chatId).once("value", async snap => {
+      const key = Object.keys(snap.val())[0];
+      const data = snap.val()[key];
+
+      await db.ref("users/" + data.uid + "/balance").transaction(bal => (bal || 0) + parseFloat(data.amount));
+      await db.ref("withdrawals/" + key).update({ status: "cancelled" });
+      db.ref("chats/" + chatId).push({ sender: "system", text: "Transaction cancelled and funds refunded.", timestamp: Date.now() });
+      alert("Transaction cancelled");
+      window.location.href = "main.html";
+    });
+  }
+</script></body>
+</html>
