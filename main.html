@@ -55,7 +55,7 @@
     const firebaseConfig = {
       apiKey: "AIzaSyDvFDByPPo9zgwKLdPaREz1OVMQCXmPfrs",
       authDomain: "bets-d795d.firebaseapp.com",
-      databaseURL: "https://bets-d795d-default-rtdb.firebaseio.com", // ✅ Correct
+      databaseURL: "https://bets-d795d-default-rtdb.firebaseio.com",
       projectId: "bets-d795d",
       storageBucket: "bets-d795d.appspot.com",
       messagingSenderId: "384386108287",
@@ -122,7 +122,7 @@
         const data = snap.val();
         if (data.status !== "pending") return alert("Already accepted.");
         const chatId = `chat_${Date.now()}`;
-        ref.update({status: "accepted", acceptedBy: currentUser.uid, chatId});
+        ref.update({ status: "accepted", acceptedBy: currentUser.uid, chatId });
 
         // Notify both parties
         db.ref(`notifications/${data.uid}`).push({
@@ -133,7 +133,7 @@
           timestamp: Date.now()
         });
         db.ref(`notifications/${currentUser.uid}`).push({
-          text: `You accepted ${data.email}'s ${currentView}.`,
+          text: `You accepted ${data.email}'s ${currentView} request.`,
           chatId,
           category: currentView,
           viewed: false,
@@ -165,7 +165,7 @@
       db.ref(`notifications/${uid}`).once("value", snap => {
         snap.forEach(c => {
           if (!c.val().viewed) {
-            db.ref(`notifications/${uid}/${c.key}`).update({viewed: true});
+            db.ref(`notifications/${uid}/${c.key}`).update({ viewed: true });
           }
         });
         document.getElementById("notifBadge").style.display = "none";
@@ -176,7 +176,9 @@
     async function sendTo2Pay() {
       const receiverEmail = prompt("Enter receiver's email:");
       const amount = parseFloat(prompt("Enter amount to send:"));
+
       if (!receiverEmail || isNaN(amount) || amount <= 0) return alert("Invalid input");
+      if (amount < 5) return alert("Minimum send amount is $5");
       if (receiverEmail === currentUser.email) return alert("Cannot send to yourself");
 
       const snap = await db.ref("users").orderByChild("email").equalTo(receiverEmail).once("value");
