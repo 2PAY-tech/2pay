@@ -3,27 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <title>2PAY Dashboard</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
-    body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #f4f6f9; }
-    .navbar { background-color: #1d2b64; color: white; padding: 16px 24px; font-size: 20px; font-weight: bold; display: flex; justify-content: space-between; }
-    .balance-card, .section { background: white; width: 90%; margin: 20px auto; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-    .balance { font-size: 28px; font-weight: bold; color: #2d8cff; }
-    .actions { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin-top: 10px; }
-    .actions button { padding: 10px 20px; border: none; border-radius: 6px; background-color: #2d8cff; color: white; cursor: pointer; }
-    .filter-select { display: block; width: 90%; margin: 10px auto; padding: 10px; font-size: 16px; }
-    .request-card { background: #fff; margin-top: 10px; padding: 15px; border-radius: 8px; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
-    .telegram-link { text-align: center; margin-top: 40px; }
-    .telegram-link a { color: #2d8cff; text-decoration: none; font-weight: bold; }
+    body { margin:0; font-family:'Segoe UI', sans-serif; background:#f4f6f9; }
+    .navbar { background:#1d2b64; color:white; padding:16px; display:flex; justify-content:space-between; align-items:center; }
+    .balance-card, .section { background:white; width:90%; margin:20px auto; padding:20px; border-radius:10px; box-shadow:0 2px 5px rgba(0,0,0,0.05); }
+    .balance { font-size:28px; color:#2d8cff; font-weight:bold; }
+    .actions button { background:#2d8cff; color:white; border:none; padding:10px 20px; margin:5px; border-radius:6px; cursor:pointer; }
+    .filter-select { width:90%; margin:10px auto; padding:10px; font-size:16px; display:block; }
+    .request-card { background:white; margin:10px 0; padding:15px; border-radius:8px; box-shadow:0 0 5px rgba(0,0,0,0.1); }
+    #notifIcon { position:relative; font-size:24px; cursor:pointer; }
+    #notifBadge { position:absolute; top:-8px; right:-10px; background:red; color:white; font-size:12px; padding:2px 6px; border-radius:50%; display:none; }
+    .telegram-link { text-align:center; margin:40px 0; }
+    .telegram-link a { color:#2d8cff; text-decoration:none; font-weight:bold; }
   </style>
 </head>
 <body>
   <div class="navbar">
     2PAY
-    <span id="user-email">Loading...</span>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span id="user-email">Loading...</span>
+      <div id="notifIcon" onclick="openNotifications()">🔔<span id="notifBadge"></span></div>
+    </div>
   </div>
 
   <div class="balance-card">
@@ -31,7 +35,7 @@
     <div class="balance" id="balance">$0.00</div>
     <div class="actions">
       <button onclick="sendTo2Pay()">Send to 2PAY</button>
-      <button onclick="alert('Feature not available now')">Deposit</button>
+      <button onclick="location.href='deposit.html'">Deposit</button>
       <button onclick="location.href='withdraw.html'">Withdraw</button>
     </div>
   </div>
@@ -39,30 +43,28 @@
   <select class="filter-select" onchange="changeView(this.value)">
     <option value="withdraw">Withdrawal Requests</option>
     <option value="deposit">Deposit Requests</option>
-    <option value="chats">Ongoing Chats</option>
   </select>
 
-  <div class="section">
-    <div id="contentList"></div>
-  </div>
+  <div class="section" id="contentList"></div>
 
   <div class="telegram-link">
-    <p>Join our <a href="https://t.me/official2pay" target="_blank">TELEGRAM CHANNEL</a></p>
+    Join our <a href="https://t.me/official2pay" target="_blank">TELEGRAM CHANNEL</a>
   </div>
 
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDvFDByPPo9zgwKLdPaREz1OVMQCXmPfrs",
       authDomain: "bets-d795d.firebaseapp.com",
-      databaseURL: "https://bets-d795d-default-rtdb.firebaseio.com",
+      databaseURL: "https://bets-d795d-default-rtdb.firebaseio.com", // ✅ Correct
       projectId: "bets-d795d",
       storageBucket: "bets-d795d.appspot.com",
       messagingSenderId: "384386108287",
       appId: "1:384386108287:android:d238a5ec8068d9bb9be84a"
     };
     firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+
     const auth = firebase.auth();
+    const db = firebase.database();
     let currentUser;
     let currentView = "withdraw";
 
@@ -72,6 +74,7 @@
       document.getElementById("user-email").textContent = user.email;
       loadBalance();
       loadContent();
+      loadNotificationBadge();
     });
 
     function loadBalance() {
@@ -88,120 +91,107 @@
 
     function loadContent() {
       const container = document.getElementById("contentList");
-      container.innerHTML = "";
-
-      if (currentView === "withdraw") {
-        db.ref("withdrawals").once("value", snap => {
-          snap.forEach(child => {
-            const data = child.val();
-            console.log("Withdrawal data:", child.key, data); // debug
-            if (data.status === "pending" && data.uid !== currentUser.uid) {
-              const earn = (data.amount * 1.2).toFixed(2);
-              const div = document.createElement("div");
-              div.className = "request-card";
-              div.innerHTML = `
-                <h4>Amount: $${data.amount}</h4>
-                <p><b>You will earn:</b> $${earn}</p>
-                <p>Email: ${data.email || 'N/A'}</p>
-                <p>Bank: ${data.bankName || 'N/A'}</p>
-                <p>Account: ${data.accountNumber || 'N/A'}</p>
-                <p>Country: ${data.country || 'N/A'}</p>
-                <p>${new Date(data.timestamp).toLocaleString()}</p>
-                <button onclick="acceptRequest('${child.key}')">Accept</button>
-              `;
-              container.appendChild(div);
-            }
-          });
+      container.innerHTML = "Loading...";
+      const path = currentView === "withdraw" ? "withdrawals" : "deposits";
+      db.ref(path).once("value", snap => {
+        container.innerHTML = "";
+        snap.forEach(child => {
+          const data = child.val();
+          if (data.status === "pending" && data.uid !== currentUser.uid) {
+            const earn = (data.amount * 1.2).toFixed(2);
+            const div = document.createElement("div");
+            div.className = "request-card";
+            div.innerHTML = `
+              <h4>Amount: $${data.amount}</h4>
+              <p><b>You will earn:</b> $${earn}</p>
+              <p>Email: ${data.email}</p>
+              <p>Country: ${data.country}</p>
+              <p>${new Date(data.timestamp).toLocaleString()}</p>
+              <button onclick="acceptRequest('${child.key}')">Accept</button>
+            `;
+            container.appendChild(div);
+          }
         });
-      } else if (currentView === "deposit") {
-        const placeholder = document.createElement("div");
-        placeholder.className = "request-card";
-        placeholder.innerHTML = "<p>Deposit requests coming soon...</p>";
-        container.appendChild(placeholder);
-      } else if (currentView === "chats") {
-        db.ref("withdrawals").once("value", snap => {
-          snap.forEach(child => {
-            const data = child.val();
-            if (data.status === "accepted" && (data.uid === currentUser.uid || data.acceptedBy === currentUser.uid)) {
-              const div = document.createElement("div");
-              div.className = "request-card";
-              div.innerHTML = `
-                <h4>Ongoing Chat</h4>
-                <p>Amount: $${data.amount}</p>
-                <button onclick="goToChat('${data.chatId}')">Chat Now</button>
-              `;
-              container.appendChild(div);
-            }
-          });
-        });
-      }
+      });
     }
 
     function acceptRequest(key) {
-      const ref = db.ref(`withdrawals/${key}`);
+      const path = currentView === "withdraw" ? "withdrawals" : "deposits";
+      const ref = db.ref(`${path}/${key}`);
       ref.once("value", snap => {
         const data = snap.val();
         if (data.status !== "pending") return alert("Already accepted.");
         const chatId = `chat_${Date.now()}`;
-        ref.update({ status: "accepted", acceptedBy: currentUser.uid, chatId });
-        window.location.href = `chat.html?id=${chatId}`;
+        ref.update({status: "accepted", acceptedBy: currentUser.uid, chatId});
+
+        // Notify both parties
+        db.ref(`notifications/${data.uid}`).push({
+          text: `Your ${currentView} request was accepted. Chat with peer.`,
+          chatId,
+          category: currentView,
+          viewed: false,
+          timestamp: Date.now()
+        });
+        db.ref(`notifications/${currentUser.uid}`).push({
+          text: `You accepted ${data.email}'s ${currentView}.`,
+          chatId,
+          category: currentView,
+          viewed: false,
+          timestamp: Date.now()
+        });
+
+        const chatPage = currentView === "withdraw" ? "chat.html" : "chatdeposit.html";
+        location.href = `${chatPage}?id=${chatId}`;
       });
     }
 
-    function goToChat(chatId) {
-      window.location.href = `chat.html?id=${chatId}`;
+    function loadNotificationBadge() {
+      const badge = document.getElementById("notifBadge");
+      const uid = auth.currentUser.uid;
+      db.ref(`notifications/${uid}`).once("value", snap => {
+        let count = 0;
+        snap.forEach(c => { if (!c.val().viewed) count++ });
+        if (count > 0) {
+          badge.textContent = `+${count}`;
+          badge.style.display = "inline-block";
+        } else {
+          badge.style.display = "none";
+        }
+      });
+    }
+
+    function openNotifications() {
+      const uid = auth.currentUser.uid;
+      db.ref(`notifications/${uid}`).once("value", snap => {
+        snap.forEach(c => {
+          if (!c.val().viewed) {
+            db.ref(`notifications/${uid}/${c.key}`).update({viewed: true});
+          }
+        });
+        document.getElementById("notifBadge").style.display = "none";
+        location.href = "notification.html";
+      });
     }
 
     async function sendTo2Pay() {
       const receiverEmail = prompt("Enter receiver's email:");
-      const amountStr = prompt("Enter amount to send:");
-      const amount = parseFloat(amountStr);
+      const amount = parseFloat(prompt("Enter amount to send:"));
+      if (!receiverEmail || isNaN(amount) || amount <= 0) return alert("Invalid input");
+      if (receiverEmail === currentUser.email) return alert("Cannot send to yourself");
 
-      if (!receiverEmail || isNaN(amount) || amount <= 0) {
-        return alert("Please enter valid inputs.");
-      }
-      if (receiverEmail === currentUser.email) {
-        return alert("You cannot send money to yourself.");
-      }
+      const snap = await db.ref("users").orderByChild("email").equalTo(receiverEmail).once("value");
+      if (!snap.exists()) return alert("User not found");
 
-      const receiverSnap = await db
-        .ref("users")
-        .orderByChild("email")
-        .equalTo(receiverEmail)
-        .once("value");
-      if (!receiverSnap.exists()) return alert("Receiver not found");
-
-      const receiverUid = Object.keys(receiverSnap.val())[0];
+      const receiverUid = Object.keys(snap.val())[0];
       const senderRef = db.ref(`users/${currentUser.uid}/balance`);
-      const receiverRef = db.ref(`users/${receiverUid}/balance`);
+      const recvRef = db.ref(`users/${receiverUid}/balance`);
+      const senderSnap = await senderRef.once("value");
+      const senderBal = senderSnap.val() || 0;
+      if (senderBal < amount) return alert("Insufficient balance");
 
-      const sendResult = await senderRef.transaction(bal => {
-        if (!bal || bal < amount) {
-          alert("Insufficient balance");
-          return; // abort
-        }
-        return bal - amount;
-      }, null, false);
-
-      if (!sendResult.committed) return; // stop if failed
-
-      await receiverRef.transaction(bal => (bal || 0) + amount);
-
-      // Log transactions
-      db.ref(`transactions/${currentUser.uid}`).push({
-        type: "Sent",
-        amount,
-        to: receiverEmail,
-        timestamp: Date.now()
-      });
-      db.ref(`transactions/${receiverUid}`).push({
-        type: "Received",
-        amount,
-        from: currentUser.email,
-        timestamp: Date.now()
-      });
-
-      alert(`Sent $${amount} to ${receiverEmail}`);
+      await senderRef.set(senderBal - amount);
+      await recvRef.transaction(bal => (bal || 0) + amount);
+      alert(`Sent $${amount.toFixed(2)} to ${receiverEmail}`);
     }
   </script>
 </body>
