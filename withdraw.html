@@ -3,45 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <title>Withdraw - 2PAY</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f4f6f9;
-      padding: 20px;
-      margin: 0;
-    }
-    h2 {
-      text-align: center;
-      font-size: 24px;
-    }
-    form {
-      background: white;
-      max-width: 400px;
-      margin: 30px auto;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-    input, button {
-      width: 100%;
-      padding: 12px;
-      margin: 10px 0;
-      font-size: 16px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      box-sizing: border-box;
-    }
-    button {
-      background-color: #2d8cff;
-      color: white;
-      border: none;
-      font-weight: bold;
-      cursor: pointer;
-    }
+    body { font-family: Arial, sans-serif; background: #f4f6f9; padding: 20px; }
+    h2 { text-align: center; }
+    form { background: white; max-width: 400px; margin: auto; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    input, button { width: 100%; padding: 10px; margin: 10px 0; }
+    button { background-color: #2d8cff; color: white; border: none; border-radius: 5px; }
   </style>
 </head>
 <body>
@@ -65,7 +35,6 @@
       appId: "1:384386108287:android:d238a5ec8068d9bb9be84a"
     };
     firebase.initializeApp(firebaseConfig);
-
     const db = firebase.database();
     const auth = firebase.auth();
 
@@ -84,7 +53,6 @@
 
     document.getElementById("withdrawForm").addEventListener("submit", async function(e) {
       e.preventDefault();
-
       const amount = parseFloat(document.getElementById("amount").value);
       const bank = document.getElementById("bank").value.trim();
       const account = document.getElementById("account").value.trim();
@@ -112,6 +80,17 @@
       const reqKey = db.ref("withdrawals").push().key;
       await db.ref("withdrawals/" + reqKey).set(request);
       await balanceRef.set(balance - amount);
+
+      // Send notification to self
+      const notifRef = db.ref("notifications/" + currentUser.uid).push();
+      await notifRef.set({
+        title: "Withdrawal Request Submitted",
+        message: "Wait for someone to accept your request.",
+        timestamp: Date.now()
+      });
+
+      // Update badge
+      db.ref("badge/" + currentUser.uid).transaction(n => (n || 0) + 1);
 
       alert("Your request has been sent successfully. You will be notified if a user accepts your request.");
       window.location.href = "main.html";

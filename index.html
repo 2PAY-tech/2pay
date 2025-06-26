@@ -60,6 +60,8 @@
   </style>
 </head>
 <body>
+
+  <!-- Register Box -->
   <div class="form-box" id="registerBox">
     <h2>Register</h2>
     <input type="email" id="regEmail" placeholder="Email">
@@ -71,6 +73,7 @@
     <span class="toggle-link" onclick="toggleForm('login')">Already have an account? Login</span>
   </div>
 
+  <!-- Login Box -->
   <div class="form-box" id="loginBox" style="display:none">
     <h2>Login</h2>
     <input type="email" id="loginEmail" placeholder="Email">
@@ -94,7 +97,7 @@
     const auth = firebase.auth();
     const db = firebase.database();
 
-    function register() {
+    async function register() {
       const email = document.getElementById("regEmail").value.trim();
       const password = document.getElementById("regPassword").value.trim();
       const age = document.getElementById("age").value.trim();
@@ -105,20 +108,37 @@
         return alert("Please fill all required fields.");
       }
 
-      auth.createUserWithEmailAndPassword(email, password)
-        .then(userCred => {
-          const uid = userCred.user.uid;
-          db.ref("users/" + uid).set({
-            email,
-            age,
-            country,
-            promoCode: promo,
-            balance: 0
-          }).then(() => {
-            window.location.href = "main.html";
-          });
-        })
-        .catch(err => alert(err.message));
+      try {
+        const userCred = await auth.createUserWithEmailAndPassword(email, password);
+        const uid = userCred.user.uid;
+
+        let promoValid = false;
+        let promoEmail = "";
+        let startingBalance = 0;
+
+        if (promo) {
+          const promoSnap = await db.ref("promoCodes/" + promo).once("value");
+          if (promoSnap.exists()) {
+            promoValid = true;
+            promoEmail = promoSnap.val().email;
+            startingBalance = 2; // $2 bonus for using valid promo code
+          } else {
+            alert("Promo code is invalid or expired.");
+          }
+        }
+
+        await db.ref("users/" + uid).set({
+          email,
+          age,
+          country,
+          promoCode: promoValid ? promo : "",
+          balance: startingBalance
+        });
+
+        window.location.href = "main.html";
+      } catch (err) {
+        alert(err.message);
+      }
     }
 
     function login() {

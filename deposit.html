@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2PAY Deposit</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f9;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 400px;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      margin: 50px auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h2 { text-align: center; }
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button {
+      background-color: #2d8cff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Deposit Request</h2>
+    <input type="number" id="amount" placeholder="Amount" required>
+    <input type="text" id="country" placeholder="Country" required>
+    <button onclick="submitDeposit()">Submit Request</button>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDvFDByPPo9zgwKLdPaREz1OVMQCXmPfrs",
+      authDomain: "bets-d795d.firebaseapp.com",
+      databaseURL: "https://bets-d795d-default-rtdb.firebaseio.com",
+      projectId: "bets-d795d",
+      storageBucket: "bets-d795d.appspot.com",
+      messagingSenderId: "384386108287",
+      appId: "1:384386108287:android:d238a5ec8068d9bb9be84a"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const auth = firebase.auth();
+
+    auth.onAuthStateChanged(user => {
+      if (!user) return location.href = "index.html";
+    });
+
+    function submitDeposit() {
+      const amount = parseFloat(document.getElementById("amount").value);
+      const country = document.getElementById("country").value.trim();
+
+      if (!amount || amount <= 0 || !country) {
+        return alert("Please enter valid deposit amount and country.");
+      }
+
+      const user = auth.currentUser;
+      const depositRef = db.ref("deposits").push();
+
+      depositRef.set({
+        uid: user.uid,
+        email: user.email,
+        amount,
+        country,
+        status: "pending",
+        timestamp: Date.now(),
+        chatId: ""
+      }).then(() => {
+        alert("Deposit request submitted. Waiting for acceptance.");
+        location.href = "main.html";
+      });
+    }
+  </script>
+</body>
+</html>
